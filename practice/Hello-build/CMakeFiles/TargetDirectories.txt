@@ -1,8 +1,0 @@
-/home/siddhesh/Desktop/LLVM-practice/practice/Hello-build/CMakeFiles/intrinsics_gen.dir
-/home/siddhesh/Desktop/LLVM-practice/practice/Hello-build/CMakeFiles/vt_gen.dir
-/home/siddhesh/Desktop/LLVM-practice/practice/Hello-build/CMakeFiles/omp_gen.dir
-/home/siddhesh/Desktop/LLVM-practice/practice/Hello-build/CMakeFiles/acc_gen.dir
-/home/siddhesh/Desktop/LLVM-practice/practice/Hello-build/CMakeFiles/target_parser_gen.dir
-/home/siddhesh/Desktop/LLVM-practice/practice/Hello-build/CMakeFiles/Hello.dir
-/home/siddhesh/Desktop/LLVM-practice/practice/Hello-build/CMakeFiles/edit_cache.dir
-/home/siddhesh/Desktop/LLVM-practice/practice/Hello-build/CMakeFiles/rebuild_cache.dir
