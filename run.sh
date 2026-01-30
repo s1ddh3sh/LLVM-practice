@@ -1,0 +1,8 @@
+#!/bin/bash
+cd practice
+mkdir -p build && cd build
+
+clang -emit-llvm -S -O1 ../hello.c 
+cmake -GNinja -DLT_LLVM_INSTALL_DIR=/home/siddhesh/llvm18/build ..  
+ninja
+opt -load-pass-plugin=./libHello.so -passes=hello -disable-output hello.ll
