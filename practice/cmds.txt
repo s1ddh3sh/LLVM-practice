@@ -1,0 +1,4 @@
+make a build and cd
+cmake -GNinja -DLT_LLVM_INSTALL_DIR=/home/siddhesh/llvm18/build ..  
+ninja
+opt -load-pass-plugin=./libHello.so -passes=hello -disable-output hello.ll
