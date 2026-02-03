@@ -1,0 +1,8 @@
+clang -g -O0 -c -emit-llvm -I../include -DENABLE_PARAMS_DYNAMIC=ON example.c -o example.bc 
+
+
+# clang -c -emit-llvm -I../include -DENABLE_PARAMS_DYNAMIC=ON ../src/mayo.c -o mayo.bc
+clang -g -O0 -c -emit-llvm -I../include -I../src -I../src/common -I../src/generic -DENABLE_PARAMS_DYNAMIC=ON ../src/mayo.c -o mayo.bc
+
+llvm-link example.bc mayo.bc -o example_mayo.bc
+llvm-dis example_mayo.bc -o example_mayo.ll
