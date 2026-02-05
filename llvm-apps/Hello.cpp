@@ -1,5 +1,8 @@
-// #include "clang/Frontend/CompilerInstance.h"
-// #include "clang/CodeGen/CodeGenAction.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/CodeGen/CodeGenAction.h"
+#include "clang/Frontend/Utils.h"
+#include "clang/Driver/Driver.h"
+#include "clang/Frontend/CompilerInvocation.h"
 
 #include "llvm/TargetParser/Host.h"
 #include "llvm/IR/Module.h"
@@ -11,46 +14,76 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Transforms/Utils/Mem2Reg.h"
 #include "llvm/IRReader/IRReader.h"
+#include "llvm/Linker/Linker.h"
 
-// std::unique_ptr<llvm::Module> c2ir(const std::string &filePath, llvm::LLVMContext &llvm_ctx)
-// {
-//     clang::CompilerInstance compiler;
-
-//     compiler.createDiagnostics();
-//     if (!compiler.hasDiagnostics())
-//         return nullptr;
-
-//     std::vector<const char *> args = {
-//         "clang-tool",
-//         "std=c++11",
-//         "-O1",
-//         "-disable-O0-optnone"};
-
-//     clang::CompilerInvocation::CreateFromArgs(compiler.getInvocation(), args, compiler.getDiagnostics());
-
-//     auto &frontendOpts = compiler.getInvocation().getFrontendOpts();
-//     frontendOpts.Inputs.clear();
-//     frontendOpts.Inputs.emplace_back(
-//         filePath,
-//         clang::Language::CXX);
-
-//     compiler.getInvocation().getTargetOpts().Triple = llvm::sys::getDefaultTargetTriple();
-
-//     compiler.setTarget(
-//         clang::TargetInfo::CreateTargetInfo(compiler.getDiagnostics(), compiler.getInvocation().getTargetOpts()));
-
-//     compiler.createFileManager();
-//     compiler.createSourceManager();
-
-//     auto action = std::make_unique<clang::EmitLLVMOnlyAction>(&llvm_ctx);
-//     if (!compiler.ExecuteAction(*action))
-//     {
-//         return nullptr;
-//     }
-
-//     return action->takeModule();
-// }
 using namespace llvm;
+
+// std::unique_ptr<Module> c2ir(const std::vector<std::string> &filepaths, const std::vector<std::string> &includeDirs, LLVMContext &llvm_ctx)
+// {
+//     auto composite = std::make_unique<Module>("composite", llvm_ctx);
+//     Linker linker(*composite);
+
+//     for (const auto &filepath : filepaths)
+//     {
+//         clang::CompilerInstance compiler;
+//         compiler.createDiagnostics();
+
+//         std::vector<const char *> args = {
+//             "clang-tool",
+//             "-O0",
+//             "-debug-info-kind=limited",
+
+//             "-DENABLE_PARAMS_DYNAMIC=ON"};
+
+//         std::string resourceDir =
+//             clang::driver::Driver("clang", llvm::sys::getDefaultTargetTriple(),
+//                                   compiler.getDiagnostics())
+//                 .ResourceDir;
+
+//         args.push_back("-resource-dir");
+//         args.push_back(resourceDir.c_str());
+//         args.push_back("-isystem");
+//         args.push_back("/usr/include");
+//         args.push_back("-isystem");
+//         args.push_back("/usr/include/x86_64-linux-gnu");
+//         args.push_back("-isystem");
+//         args.push_back("/usr/local/include");
+//         for (const auto &dir : includeDirs)
+//         {
+//             args.push_back("-I");
+//             args.push_back(dir.c_str());
+//         }
+
+//         clang::CompilerInvocation::CreateFromArgs(compiler.getInvocation(), args, compiler.getDiagnostics());
+//         compiler.getHeaderSearchOpts().Verbose = true;
+
+//         auto &frontendOpts = compiler.getInvocation().getFrontendOpts();
+//         frontendOpts.Inputs.clear();
+//         frontendOpts.Inputs.emplace_back(
+//             filepath,
+//             clang::Language::C);
+//         compiler.getInvocation().getTargetOpts().Triple = llvm::sys::getDefaultTargetTriple();
+
+//         compiler.createFileManager();
+//         compiler.createSourceManager();
+
+//         compiler.setTarget(
+//             clang::TargetInfo::CreateTargetInfo(compiler.getDiagnostics(), compiler.getInvocation().getTargetOpts()));
+
+//         auto action = std::make_unique<clang::EmitLLVMOnlyAction>(&llvm_ctx);
+//         if (!compiler.ExecuteAction(*action))
+//         {
+//             return nullptr;
+//         }
+
+//         std::unique_ptr<Module> mod = action->takeModule();
+//         if (linker.linkInModule(std::move(mod)))
+//         {
+//             return nullptr;
+//         }
+//     }
+//     return composite;
+// }
 
 std::unique_ptr<Module> ir2Module(const std::string &filepath, LLVMContext &llvm_ctx)
 {
@@ -67,7 +100,7 @@ struct MyFirstPass : PassInfoMixin<MyFirstPass>
 {
     PreservedAnalyses run(Function &F, FunctionAnalysisManager &)
     {
-        if (F.getName() != "m_vec_mul_add")
+        if (F.getName() != "decode")
         {
             return PreservedAnalyses::all();
         }
@@ -142,8 +175,5 @@ int main(int argc, char **argv)
     llvm::LLVMContext llvm_ctx;
 
     std::unique_ptr<llvm::Module> module = ir2Module(ir_file, llvm_ctx);
-
     prepare(module);
-
-    // module->print(llvm::outs(), nullptr);
 }
