@@ -24,6 +24,11 @@ using namespace llvm;
 std::unique_ptr<Module> c2ir(const std::vector<std::string> &filepaths, const std::vector<std::string> &includeDirs, LLVMContext &llvm_ctx)
 {
     auto composite = std::make_unique<Module>("composite", llvm_ctx);
+
+    composite->setTargetTriple(llvm::Triple("arm-unknown-none-eabi"));
+    composite->setDataLayout(
+        llvm::DataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64"));
+
     Linker linker(*composite);
 
     for (const auto &filepath : filepaths)
@@ -46,18 +51,31 @@ std::unique_ptr<Module> c2ir(const std::vector<std::string> &filepaths, const st
 
         std::string resourceDir = "/usr/local/lib/clang/23";
 
+        args.push_back("-Wno-macro-redefined");
+
         args.push_back("-resource-dir");
         args.push_back(resourceDir.c_str());
+
+        args.push_back("-ffreestanding");
+        args.push_back("-fno-builtin");
+
+        compiler.getInvocation().getHeaderSearchOpts().Sysroot = "/usr/lib/arm-none-eabi";
+
+        args.push_back("-isystem");
+        args.push_back("/usr/lib/arm-none-eabi/include");
+
+        args.push_back("-isystem");
+        args.push_back("/usr/lib/gcc/arm-none-eabi/13.2.1/include");
 
         std::string builtinInclude = resourceDir + "/include";
         args.push_back("-internal-isystem");
         args.push_back(strdup(builtinInclude.c_str()));
-        args.push_back("-isystem");
-        args.push_back("/usr/include");
-        args.push_back("-isystem");
-        args.push_back("/usr/include/x86_64-linux-gnu");
-        args.push_back("-isystem");
-        args.push_back("/usr/local/include");
+        // args.push_back("-isystem");
+        // args.push_back("/usr/include");
+        // args.push_back("-isystem");
+        // args.push_back("/usr/include/x86_64-linux-gnu");
+        // args.push_back("-isystem");
+        // args.push_back("/usr/local/include");
         for (const auto &dir : includeDirs)
         {
             args.push_back("-I");
@@ -66,19 +84,27 @@ std::unique_ptr<Module> c2ir(const std::vector<std::string> &filepaths, const st
 
         clang::CompilerInvocation::CreateFromArgs(compiler.getInvocation(), args, compiler.getDiagnostics());
 
-        auto &HSO = compiler.getHeaderSearchOpts();
-        HSO.UseBuiltinIncludes = true;
-        HSO.UseStandardSystemIncludes = true;
-        HSO.UseStandardCXXIncludes = false;
+        // auto &HSO = compiler.getHeaderSearchOpts();
+        // HSO.UseBuiltinIncludes = true;
+        // HSO.UseStandardSystemIncludes = true;
+        // HSO.UseStandardCXXIncludes = false;
 
         // compiler.getHeaderSearchOpts().Verbose = true;
+
+        CGO.FloatABI = "soft"; // or "hard" if FPU
+        CGO.RelocationModel = llvm::Reloc::Model::Static;
+        CGO.CodeModel = "small";
 
         auto &frontendOpts = compiler.getInvocation().getFrontendOpts();
         frontendOpts.Inputs.clear();
         frontendOpts.Inputs.emplace_back(
             filepath,
             clang::Language::C);
-        compiler.getInvocation().getTargetOpts().Triple = llvm::sys::getDefaultTargetTriple();
+        compiler.getInvocation().getTargetOpts().Triple = "arm-unknown-none-eabi";
+
+        auto &TO = compiler.getInvocation().getTargetOpts();
+        TO.CPU = "cortex-m4";
+        TO.Features = {"+thumb2"};
 
         compiler.createFileManager();
         compiler.createSourceManager();
@@ -93,6 +119,11 @@ std::unique_ptr<Module> c2ir(const std::vector<std::string> &filepaths, const st
         }
 
         std::unique_ptr<Module> mod = action->takeModule();
+        if (!mod)
+        {
+            llvm::errs() << "Module generation failed\n";
+            return nullptr;
+        }
         if (linker.linkInModule(std::move(mod)))
         {
             return nullptr;
@@ -204,6 +235,10 @@ int main(int argc, char **argv)
 
     llvm::LLVMContext llvm_ctx;
     std::unique_ptr<llvm::Module> module = c2ir(files, includes, llvm_ctx);
+
+    module->setTargetTriple(llvm::Triple("arm-unknown-none-eabi"));
+    module->setDataLayout(llvm::DataLayout(
+        "e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64"));
 
     if (llvm::verifyModule(*module, &llvm::errs()))
     {
