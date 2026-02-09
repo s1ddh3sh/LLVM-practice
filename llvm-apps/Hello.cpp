@@ -37,8 +37,12 @@ std::unique_ptr<Module> c2ir(const std::vector<std::string> &filepaths, const st
             // "-g",
             // "-fno-builtin",
             // "-fno-freestanding",
-            "-debug-info-kind=limited",
+            // "-debug-info-kind=limited",
             "-DENABLE_PARAMS_DYNAMIC=ON"};
+
+        auto &CGO = compiler.getInvocation().getCodeGenOpts();
+        CGO.setDebugInfo(llvm::codegenoptions::FullDebugInfo);
+        CGO.DebugColumnInfo = true;
 
         std::string resourceDir = "/usr/local/lib/clang/23";
 
@@ -208,7 +212,7 @@ int main(int argc, char **argv)
     }
 
     std::error_code EC;
-    llvm::raw_fd_ostream outFile("mayo.ll", EC);
+    llvm::raw_fd_ostream outFile("../mayo.ll", EC);
 
     if (EC)
     {
@@ -219,5 +223,5 @@ int main(int argc, char **argv)
         module->print(outFile, nullptr);
         llvm::outs() << "Successfully wrote mayo.ll\n";
     }
-    prepare(module);
+    // prepare(module);
 }
