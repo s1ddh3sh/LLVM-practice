@@ -26,8 +26,8 @@ std::unique_ptr<Module> c2ir(const std::vector<std::string> &filepaths, const st
     auto composite = std::make_unique<Module>("composite", llvm_ctx);
 
     composite->setTargetTriple(llvm::Triple("arm-unknown-none-eabi"));
-    composite->setDataLayout(
-        llvm::DataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64"));
+    // composite->setDataLayout(
+    //     llvm::DataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64"));
 
     Linker linker(*composite);
 
@@ -205,7 +205,7 @@ void prepare(std::unique_ptr<llvm::Module> &module)
     FunctionPassManager FPM;
     FPM.addPass(PromotePass());
     FPM.addPass(MyFirstPass());
-    FPM.addPass(CFGPrinterPass());
+    // FPM.addPass(CFGPrinterPass());
 
     ModulePassManager MPM;
     MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
@@ -237,8 +237,8 @@ int main(int argc, char **argv)
     std::unique_ptr<llvm::Module> module = c2ir(files, includes, llvm_ctx);
 
     module->setTargetTriple(llvm::Triple("arm-unknown-none-eabi"));
-    module->setDataLayout(llvm::DataLayout(
-        "e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64"));
+    // module->setDataLayout(llvm::DataLayout(
+    //     "e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64"));
 
     if (llvm::verifyModule(*module, &llvm::errs()))
     {
