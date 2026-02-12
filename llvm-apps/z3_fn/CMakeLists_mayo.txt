@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(z3_analysis)
+project(v_Ox_add_expr)
 
 find_package(LLVM REQUIRED CONFIG)
 
@@ -23,7 +23,7 @@ if(NOT Z3_FOUND)
   endif()
 endif()
 
-add_executable(z3_analysis z3_demo.cpp)
+add_executable(v_Ox_add_expr v_Ox_add_expr.cpp)
 
 # Map needed LLVM components to library names
 llvm_map_components_to_libnames(LLVM_LIBS
@@ -36,13 +36,13 @@ llvm_map_components_to_libnames(LLVM_LIBS
 # --------------------
 # Link libraries
 # --------------------
-target_link_libraries(z3_analysis
+target_link_libraries(v_Ox_add_expr
   PRIVATE
   ${LLVM_LIBS}
   ${Z3_LIBRARIES}
 )
 
-target_include_directories(z3_analysis
+target_include_directories(v_Ox_add_expr
   PRIVATE
   ${Z3_INCLUDE_DIRS}
 )
