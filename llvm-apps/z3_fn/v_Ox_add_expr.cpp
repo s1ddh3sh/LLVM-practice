@@ -92,9 +92,7 @@ void translateToZ3(Function &F, z3::context &ctx)
         for (auto &I : BB)
         {
             // I.print(errs());
-            std::string regName = "";
-            if (I.hasName())
-                regName = "%" + I.getName().str();
+           
 
             if (auto *gep = llvm::dyn_cast<llvm::GetElementPtrInst>(&I))
             {

@@ -17,6 +17,54 @@
 
 using namespace llvm;
 
+struct SymbolicStore
+{
+    std::map<llvm::Value *, z3::expr> store;
+    z3::context &ctx;
+
+    SymbolicStore(z3::context &c) : ctx(c) {}
+
+    z3::expr &operator[](Value *key)
+    {
+        auto it = store.find(key);
+        if (it == store.end())
+        {
+            // If the register isn't found, initialize it as 'public' (false)
+            // This prevents the "default constructor" error
+            auto res = store.emplace(key, ctx.bool_val(false));
+            return res.first->second;
+        }
+        return it->second;
+    }
+
+    // void insert_or_assign(Value *key, z3::expr expr) {
+    //     auto it = store.find(key);
+    //     if(it == store.end()) {
+
+    //     } else {
+    //         store[key] = expr;
+    //     }
+    // }
+    // Check if we already have a taint for this value
+    bool has(llvm::Value *key)
+    {
+        return store.find(key) != store.end();
+    }
+
+    void printAll()
+    {
+        for (auto &entry : store)
+        {
+            Value *key = entry.first;
+            z3::expr expr = entry.second;
+
+            std::string name = key->getName().str();
+            std::cout << "%" << name << " : "
+                      << expr << "\n";
+        }
+    }
+};
+
 Function *findFunction(Module &M)
 {
     for (Function &F : M)
@@ -38,69 +86,86 @@ std::unique_ptr<Module> ir2Module(const std::string &filepath, LLVMContext &llvm
     return module;
 }
 
-void translateToZ3(Function &F, z3::context &ctx)
+void z3_analysis(Function &F, z3::context &ctx)
 {
-    std::map<Value *, z3::expr> term_store;
+    SymbolicStore term_store(ctx);
+    std::map<Value *, Value *> pointsTo;
     z3::expr secret = ctx.bool_const("SECRET_KEY");
     z3::expr public_val = ctx.bool_val(false);
     z3::expr mask = ctx.bool_const("VINEGAR_MASK");
+
+    for (auto &arg : F.args())
+    {
+        pointsTo[&arg] = &arg;
+        z3::expr res = public_val;
+
+        term_store[&arg] = res;
+    }
+
+    for (auto &BB : F)
+    {
+        for (auto &I : BB)
+        {
+            // Seed allocas and arguments as memory roots
+            if (auto *allocaInst = dyn_cast<AllocaInst>(&I))
+            {
+                pointsTo[allocaInst] = allocaInst;
+                z3::expr res = public_val;
+                std::string name = allocaInst->getName().str();
+                if (name.find("sk") != std::string::npos)
+                {
+                    res = secret;
+                }
+                else if (name.find("Vdec") != std::string::npos)
+                {
+                    res = mask;
+                }
+                term_store[allocaInst] = res;
+            }
+        }
+    }
 
     for (auto &BB : F)
     {
         for (auto &I : BB)
         {
             // I.print(errs());
-            std::string regName = "";
-            if (I.hasName())
-                regName = "%" + I.getName().str();
 
-            if (auto *gep = llvm::dyn_cast<llvm::GetElementPtrInst>(&I))
+            if (auto *gep = llvm::dyn_cast<GetElementPtrInst>(&I))
             {
-
-                Value *basePtr = gep->getPointerOperand();
-                std::string baseName = basePtr->getName().str();
-
-                z3::expr property = public_val; // Default to public
-                if (term_store.count(basePtr))
-                {
-                    property = term_store.at(basePtr);
-                }
-                else
-                {
-
-                    if (baseName.find("sk") != std::string::npos)
-                    {
-                        property = secret;
-                    }
-                    else if (baseName.find("Vdec") != std::string::npos)
-                    {
-                        property = mask;
-                    }
-                }
-                term_store.insert({gep, property});
+                Value *base = gep->getPointerOperand();
+                pointsTo[gep] = pointsTo[base];
             }
+
             if (auto *load = dyn_cast<LoadInst>(&I))
             {
                 Value *src = load->getPointerOperand();
-
-                if (term_store.count(src))
-                {
-                    term_store.insert({&I, term_store.at(src)});
-                }
+                term_store[load] = term_store[pointsTo[src]];
             }
 
             if (auto *store = dyn_cast<StoreInst>(&I))
             {
                 Value *src = store->getValueOperand();
                 Value *dst = store->getPointerOperand();
-
-                if (term_store.count(src))
-                {
-                    term_store.insert({dst, term_store.at(src)});
-                }
+                if (src->getType()->isPointerTy())
+                    pointsTo[dst] = pointsTo[src];
+                else
+                    term_store[pointsTo[dst]] = term_store[src];
             }
 
-            //     // Handle Function Calls (mat_add, mat_mul, memcpy)
+            if (auto *binOp = dyn_cast<BinaryOperator>(&I))
+            {
+                Value *op1 = binOp->getOperand(0);
+                Value *op2 = binOp->getOperand(1);
+
+                z3::expr t1 = term_store[op1];
+                z3::expr t2 = term_store[op2];
+
+                z3::expr result = t1 || t2;
+
+                term_store[binOp] = result;
+            }
+
             if (auto *call = llvm::dyn_cast<llvm::CallInst>(&I))
             {
 
@@ -111,93 +176,34 @@ void translateToZ3(Function &F, z3::context &ctx)
 
                 if (funcName == "mat_add")
                 {
-                    // Expression: vi_eph || Ox_sec
-                    llvm::Value *arg_vi = call->getArgOperand(0); // ptr %115 (vi)
-                    llvm::Value *arg_Ox = call->getArgOperand(1); // ptr %arraydecay123
+                    Value *vi = call->getArgOperand(0); // ptr %115 (vi)
+                    Value *Ox = call->getArgOperand(1); // ptr %arraydecay123
+                    Value *dest = call->getArgOperand(2);
 
-                    // std::cout << "Checking mat_add args:\n";
-                    // std::cout << "  arg_vi: ";
-                    // arg_vi->print(llvm::errs());
-                    // std::cout << "\n  arg_Ox: ";
-                    // arg_Ox->print(llvm::errs());
-                    // std::cout << "\n";
-
-                    // std::cout << "term_store has arg_vi? "
-                    //           << term_store.count(arg_vi) << "\n";
-                    // std::cout << "term_store has arg_Ox? "
-                    //           << term_store.count(arg_Ox) << "\n";
-
-                    if (term_store.count(arg_vi) && term_store.count(arg_Ox))
-                    {
-                        z3::expr res = term_store.at(arg_vi) || term_store.at(arg_Ox);
-
-                        // The result of mat_add is stored in the buffer provided in Arg 2
-                        llvm::Value *dest = call->getArgOperand(2);
-                        term_store.insert({dest, res});
-                        if (auto *gep = dyn_cast<GetElementPtrInst>(dest))
-                        {
-                            Value *base = gep->getPointerOperand();
-                            term_store.insert({base, res});
-                        }
-                        // std::cout << "mat_add result at "
-                        //           << call->getArgOperand(2)->getName().str()
-                        //           << " : "
-                        //           << res.simplify()
-                        //           << "\n";
-                    }
+                    term_store[pointsTo[dest]] = term_store[pointsTo[vi]] || term_store[pointsTo[Ox]];
                 }
 
                 else if (funcName == "mat_mul")
                 {
-                    llvm::Value *arg_O = call->getArgOperand(0); // ptr %arraydecay117
-                    llvm::Value *arg_x = call->getArgOperand(1); // ptr %add.ptr120
+                    Value *O = call->getArgOperand(0); // ptr %arraydecay117
+                    Value *x = call->getArgOperand(1); // ptr %add.ptr120
+                    Value *dest = call->getArgOperand(2);
 
-                    if (term_store.count(arg_O) && term_store.count(arg_x))
-                    {
-                        z3::expr res = term_store.at(arg_O) || term_store.at(arg_x);
-
-                        // Result goes into Arg 2 (%arraydecay121)
-                        llvm::Value *dest = call->getArgOperand(2);
-                        term_store.insert({dest, res});
-                        if (auto *gep = dyn_cast<GetElementPtrInst>(dest))
-                        {
-                            Value *base = gep->getPointerOperand();
-                            term_store.insert({base, res});
-                        }
-                        // std::cout << "  -> Z3 mat_mul: " << res.simplify() << "\n";
-                    }
+                    term_store[pointsTo[dest]] = term_store[pointsTo[O]] || term_store[pointsTo[x]];
                 }
                 else if (funcName == "memcpy")
                 {
                     // memcpy(dest, src, size)
-                    llvm::Value *dest = call->getArgOperand(0);
-                    llvm::Value *src = call->getArgOperand(1);
+                    Value *dest = call->getArgOperand(0);
+                    Value *src = call->getArgOperand(1);
 
-                    if (term_store.count(src))
-                    {
-                        z3::expr res = term_store.at(src);
-                        term_store.insert({dest, res});
-                        if (auto *gep = dyn_cast<GetElementPtrInst>(dest))
-                        {
-                            Value *base = gep->getPointerOperand();
-                            term_store.insert({base, res});
-                        }
-                        // std::cout << "  -> Z3 memcpy: " << res.simplify() << "\n";
-                    }
+                    term_store[pointsTo[dest]] = term_store[pointsTo[src]];
                 }
             }
         }
     }
 
-    for (auto &entry : term_store)
-    {
-        Value *key = entry.first;
-        z3::expr expr = entry.second;
-
-        std::string name = key->getName().str();
-        std::cout << "%" << name << " : "
-                  << expr << "\n";
-    }
+    term_store.printAll();
 }
 
 int main()
@@ -220,7 +226,7 @@ int main()
 
     z3::context ctx;
 
-    translateToZ3(*F, ctx);
+    z3_analysis(*F, ctx);
 
     return 0;
 }
