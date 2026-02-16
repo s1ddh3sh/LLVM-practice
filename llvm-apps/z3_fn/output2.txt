@@ -1,0 +1,14 @@
+
+Symbolic expressions for s = v + O*x
+
+
+Full s vector:
+
+s[0] = (MAT_ADD Vdec_0 (MAT_MUL O_row_0 x_row_0))
+s[1] = (MAT_ADD Vdec_1 (MAT_MUL O_row_1 x_row_1))
+s[2] = (MAT_ADD Vdec_2 (MAT_MUL O_row_2 x_row_2))
+s[3] = (MAT_ADD Vdec_3 (MAT_MUL O_row_3 x_row_3))
+s[4] = x_tail_0
+s[5] = x_tail_1
+s[6] = x_tail_2
+s[7] = x_tail_3
