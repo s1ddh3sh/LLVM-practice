@@ -197,7 +197,7 @@ int main()
                 Value *x_ptr = call->getArgOperand(1);
                 Value *Ox_ptr = call->getArgOperand(2);
 
-                int rows = 4;
+                int rows = 8;
 
                 for (int r = 0; r < rows; r++)
                 {
@@ -222,7 +222,7 @@ int main()
                 Value *Ox_ptr = call->getArgOperand(1);
                 Value *s_ptr = call->getArgOperand(2);
 
-                int rows = 4;
+                int rows = 8;
 
                 for (int r = 0; r < rows; r++)
                 {
@@ -248,7 +248,7 @@ int main()
                 Value *dst = call->getArgOperand(0);
                 Value *src = call->getArgOperand(1);
 
-                int param_o = 4; // symbolic width
+                int param_o = 8; // symbolic width
 
                 for (int j = 0; j < param_o; j++)
                 {
@@ -264,15 +264,15 @@ int main()
     }
 
     std::cout << "\nSymbolic expressions for s = v + O*x\n\n";
-    std::cout << "\nFull s vector:\n\n";
+    std::cout << "\n One s vector:\n\n";
 
-    for (int r = 0; r < 4; r++)
+    for (int r = 0; r < 8; r++)
     {
         z3::expr head = safe_get(mem, (Value *)(uintptr_t)(0x500000 + r), ctx, 4);
         std::cout << "s[" << r << "] = " << head << "\n";
     }
 
-    for (int j = 0; j < 4; j++)
+    for (int j = 0; j < 8; j++)
     {
         z3::expr tail = safe_get(mem, (Value *)(uintptr_t)(0x600000 + j), ctx, 4);
         std::cout << "s[" << (4 + j) << "] = " << tail << "\n";
